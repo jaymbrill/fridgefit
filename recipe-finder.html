@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FridgeFit — AI Recipe Finder</title>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green-900: #14532d;
+      --green-700: #15803d;
+      --green-600: #16a34a;
+      --green-500: #22c55e;
+      --green-100: #dcfce7;
+      --green-50:  #f0fdf4;
+      --amber-600: #d97706;
+      --amber-100: #fef3c7;
+      --amber-50:  #fffbeb;
+      --red-600:   #dc2626;
+      --red-50:    #fef2f2;
+      --red-100:   #fee2e2;
+      --gray-900: #111827;
+      --gray-800: #1f2937;
+      --gray-700: #374151;
+      --gray-500: #6b7280;
+      --gray-400: #9ca3af;
+      --gray-200: #e5e7eb;
+      --gray-100: #f3f4f6;
+      --gray-50:  #f9fafb;
+      --white:    #ffffff;
+
+      --radius-sm: 8px;
+      --radius:    12px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-md: 0 4px 12px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04);
+      --shadow-lg: 0 12px 30px rgba(0,0,0,.1),  0 4px 10px rgba(0,0,0,.05);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                   'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(160deg, #f0fdf4 0%, #dcfce7 40%, #f0fdf4 100%);
+      min-height: 100vh;
+      color: var(--gray-900);
+      line-height: 1.6;
+    }
+
+    /* ── Layout ── */
+    .app {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 5rem;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .header-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--green-900);
+      letter-spacing: -.5px;
+      margin-bottom: .35rem;
+    }
+    .header-brand .leaf { font-size: 2.1rem; }
+    .header-tagline {
+      color: var(--gray-500);
+      font-size: .95rem;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid rgba(0,0,0,.04);
+    }
+
+    .field-label {
+      font-size: .875rem;
+      font-weight: 600;
+      color: var(--gray-700);
+      margin-bottom: .6rem;
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+    }
+
+    .field-group { margin-bottom: 1.5rem; }
+
+    /* ── API Key ── */
+    .api-key-wrap { position: relative; }
+    .api-key-input {
+      width: 100%;
+      padding: .7rem 2.8rem .7rem 1rem;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      font-size: .875rem;
+      font-family: 'Courier New', monospace;
+      color: var(--gray-800);
+      background: var(--gray-50);
+      outline: none;
+      transition: border-color .18s, box-shadow .18s, background .18s;
+    }
+    .api-key-input:focus {
+      border-color: var(--green-600);
+      box-shadow: 0 0 0 3px rgba(22,163,74,.15);
+      background: var(--white);
+    }
+    .api-key-toggle {
+      position: absolute;
+      right: .7rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--gray-400);
+      font-size: 1rem;
+      line-height: 1;
+      padding: .2rem;
+      border-radius: 4px;
+      transition: color .15s;
+    }
+    .api-key-toggle:hover { color: var(--gray-600); }
+
+    .security-note {
+      display: flex;
+      gap: .4rem;
+      align-items: flex-start;
+      font-size: .775rem;
+      color: var(--amber-600);
+      background: var(--amber-50);
+      border: 1px solid rgba(217,119,6,.25);
+      border-radius: 6px;
+      padding: .55rem .8rem;
+      margin-top: .5rem;
+      line-height: 1.45;
+    }
+    .security-note .icon { flex-shrink: 0; margin-top: .05rem; }
+    .field-hint {
+      font-size: .775rem;
+      color: var(--gray-400);
+      margin-top: .4rem;
+    }
+    .field-hint a { color: var(--green-700); text-decoration: none; }
+    .field-hint a:hover { text-decoration: underline; }
+
+    /* ── Tag Input ── */
+    .tags-box {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem;
+      padding: .6rem .7rem;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      background: var(--gray-50);
+      min-height: 54px;
+      cursor: text;
+      transition: border-color .18s, box-shadow .18s, background .18s;
+    }
+    .tags-box:focus-within {
+      border-color: var(--green-600);
+      box-shadow: 0 0 0 3px rgba(22,163,74,.15);
+      background: var(--white);
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      padding: .28rem .65rem;
+      background: var(--green-100);
+      color: var(--green-900);
+      border-radius: var(--radius-full);
+      font-size: .825rem;
+      font-weight: 500;
+      border: 1px solid rgba(21,128,61,.2);
+      white-space: nowrap;
+    }
+    .tag-remove {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--green-700);
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0;
+      width: 15px;
+      height: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background .12s, color .12s;
+    }
+    .tag-remove:hover { background: rgba(21,128,61,.18); color: var(--green-900); }
+    .tag-text-input {
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: .875rem;
+      color: var(--gray-800);
+      font-family: inherit;
+      min-width: 130px;
+      flex: 1;
+    }
+    .tag-text-input::placeholder { color: var(--gray-400); }
+
+    /* ── Select ── */
+    .select-wrap { position: relative; }
+    .select {
+      width: 100%;
+      padding: .7rem 2.4rem .7rem 1rem;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      font-size: .875rem;
+      color: var(--gray-800);
+      background: var(--gray-50);
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .18s, box-shadow .18s, background .18s;
+    }
+    .select:focus {
+      border-color: var(--green-600);
+      box-shadow: 0 0 0 3px rgba(22,163,74,.15);
+      background: var(--white);
+    }
+    .select-chevron {
+      position: absolute;
+      right: .85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: var(--gray-400);
+      font-size: .75rem;
+    }
+
+    /* ── Two-column layout ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+    @media (max-width: 560px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Button ── */
+    .btn-primary {
+      width: 100%;
+      padding: .9rem 1.5rem;
+      background: linear-gradient(135deg, var(--green-600) 0%, var(--green-700) 100%);
+      color: var(--white);
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      font-family: inherit;
+      box-shadow: 0 4px 14px rgba(22,163,74,.35);
+      transition: transform .15s, box-shadow .15s, opacity .15s;
+      margin-top: .25rem;
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(22,163,74,.42);
+    }
+    .btn-primary:active:not(:disabled) { transform: translateY(0); }
+    .btn-primary:disabled { opacity: .65; cursor: not-allowed; }
+
+    /* ── Error ── */
+    .error-box {
+      display: flex;
+      gap: .5rem;
+      align-items: flex-start;
+      background: var(--red-50);
+      border: 1px solid rgba(220,38,38,.25);
+      border-radius: var(--radius-sm);
+      padding: .75rem 1rem;
+      color: var(--red-600);
+      font-size: .875rem;
+      margin-top: 1rem;
+      line-height: 1.5;
+    }
+
+    /* ── Results ── */
+    .results-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,.04);
+      animation: rise .3s ease;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .results-header {
+      background: linear-gradient(135deg, var(--green-700) 0%, var(--green-900) 100%);
+      padding: 1.4rem 2rem;
+      color: var(--white);
+    }
+    .results-header h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+    .results-meta {
+      font-size: .825rem;
+      opacity: .8;
+      margin-top: .25rem;
+    }
+    .results-body { padding: 2rem; }
+
+    /* ── Thinking indicator ── */
+    .thinking-bar {
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+      padding: .85rem 1.1rem;
+      background: var(--green-50);
+      border: 1px solid rgba(22,163,74,.2);
+      border-radius: var(--radius-sm);
+      color: var(--green-700);
+      font-size: .875rem;
+      font-weight: 500;
+      margin-bottom: 1.25rem;
+    }
+    .dots {
+      display: flex;
+      gap: .22rem;
+    }
+    .dots span {
+      width: 6px;
+      height: 6px;
+      background: var(--green-600);
+      border-radius: 50%;
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+    .dots span:nth-child(2) { animation-delay: .2s; }
+    .dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(.55); opacity: .4; }
+      40%           { transform: scale(1);   opacity: 1; }
+    }
+
+    /* ── Recipe content (markdown) ── */
+    .recipe-md {
+      font-size: .935rem;
+      line-height: 1.85;
+      color: var(--gray-800);
+    }
+    .recipe-md h1 {
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: var(--green-900);
+      margin-bottom: .6rem;
+      letter-spacing: -.3px;
+    }
+    .recipe-md h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--green-700);
+      margin: 1.5rem 0 .6rem;
+      padding-bottom: .35rem;
+      border-bottom: 2px solid var(--green-100);
+    }
+    .recipe-md h3 {
+      font-size: .975rem;
+      font-weight: 600;
+      color: var(--gray-800);
+      margin: 1.1rem 0 .4rem;
+    }
+    .recipe-md p { margin-bottom: .65rem; }
+    .recipe-md ul, .recipe-md ol {
+      padding-left: 1.4rem;
+      margin-bottom: .85rem;
+    }
+    .recipe-md li { margin-bottom: .3rem; }
+    .recipe-md strong { font-weight: 700; color: var(--gray-900); }
+    .recipe-md em { color: var(--gray-600); }
+    .recipe-md hr {
+      border: none;
+      border-top: 1.5px solid var(--gray-100);
+      margin: 1.25rem 0;
+    }
+    .recipe-md blockquote {
+      border-left: 3px solid var(--green-500);
+      padding: .5rem 1rem;
+      color: var(--gray-600);
+      font-style: italic;
+      background: var(--green-50);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      margin: .75rem 0;
+    }
+    .recipe-md code {
+      background: var(--gray-100);
+      padding: .15rem .4rem;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: .85em;
+    }
+    .recipe-md table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+      font-size: .875rem;
+    }
+    .recipe-md th {
+      background: var(--green-50);
+      color: var(--green-900);
+      font-weight: 600;
+      padding: .5rem .75rem;
+      border: 1px solid var(--green-100);
+      text-align: left;
+    }
+    .recipe-md td {
+      padding: .45rem .75rem;
+      border: 1px solid var(--gray-200);
+    }
+    .recipe-md tr:nth-child(even) td { background: var(--gray-50); }
+
+    /* ── Stream cursor ── */
+    .stream-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      background: var(--green-600);
+      border-radius: 1px;
+      vertical-align: text-bottom;
+      margin-left: 2px;
+      animation: blink .85s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 45%  { opacity: 1; }
+      55%, 100% { opacity: 0; }
+    }
+
+    /* ── Loading dots in button ── */
+    .btn-dots {
+      display: inline-flex;
+      gap: 3px;
+    }
+    .btn-dots span {
+      animation: bounce 1.2s ease-in-out infinite;
+      font-size: 1.4rem;
+      line-height: 1;
+    }
+    .btn-dots span:nth-child(2) { animation-delay: .2s; }
+    .btn-dots span:nth-child(3) { animation-delay: .4s; }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      margin-top: 3.5rem;
+      font-size: .78rem;
+      color: var(--gray-400);
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+  const { useState, useRef, useCallback, useEffect, useMemo } = React;
+
+  /* ── Constants ── */
+  const CUISINES = [
+    { value: '',              label: 'Any cuisine (surprise me!)' },
+    { value: 'Italian',      label: '🇮🇹  Italian' },
+    { value: 'Asian',        label: '🥢  Asian' },
+    { value: 'Mexican',      label: '🌮  Mexican' },
+    { value: 'American',     label: '🍔  American' },
+    { value: 'Mediterranean',label: '🫒  Mediterranean' },
+  ];
+
+  /* ── Markdown renderer ── */
+  function renderMd(text) {
+    if (!text) return '';
+    if (window.marked) {
+      window.marked.setOptions({ breaks: true, gfm: true });
+      return window.marked.parse(text);
+    }
+    // Basic fallback if CDN failed
+    return text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/^(?!<[hlu]|<\/[hlu])/gm, '')
+  }
+
+  /* ── IngredientInput ── */
+  function IngredientInput({ tags, setTags }) {
+    const [val, setVal] = useState('');
+    const inputRef = useRef(null);
+
+    function commit(raw) {
+      const v = raw.trim().replace(/,+$/, '').trim();
+      if (v && !tags.includes(v)) setTags([...tags, v]);
+      setVal('');
+    }
+
+    function onKeyDown(e) {
+      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(val); }
+      if (e.key === 'Backspace' && !val && tags.length) {
+        setTags(tags.slice(0, -1));
+      }
+    }
+
+    function onChange(e) {
+      const v = e.target.value;
+      if (v.endsWith(',')) commit(v); else setVal(v);
+    }
+
+    return (
+      <>
+        <div className="tags-box" onClick={() => inputRef.current?.focus()}>
+          {tags.map((t, i) => (
+            <span key={i} className="tag">
+              {t}
+              <button
+                className="tag-remove"
+                onClick={e => { e.stopPropagation(); setTags(tags.filter((_,j)=>j!==i)); }}
+                aria-label={`Remove ${t}`}
+                type="button"
+              >×</button>
+            </span>
+          ))}
+          <input
+            ref={inputRef}
+            className="tag-text-input"
+            value={val}
+            onChange={onChange}
+            onKeyDown={onKeyDown}
+            onBlur={() => val.trim() && commit(val)}
+            placeholder={tags.length === 0 ? 'e.g. chicken, lemon, garlic…' : 'Add more…'}
+          />
+        </div>
+        <p className="field-hint">Press <strong>Enter</strong> or <strong>,</strong> after each ingredient</p>
+      </>
+    );
+  }
+
+  /* ── RecipePanel ── */
+  function RecipePanel({ text, isThinking, isStreaming, meta }) {
+    const html = useMemo(() => renderMd(text), [text]);
+
+    return (
+      <div className="results-card">
+        <div className="results-header">
+          <h2>Your Personalized Recipe</h2>
+          {meta && (
+            <p className="results-meta">
+              {meta.ingredients.join(' · ')}
+              {meta.cuisine ? `  ·  ${meta.cuisine}` : ''}
+            </p>
+          )}
+        </div>
+        <div className="results-body">
+          {isThinking && (
+            <div className="thinking-bar">
+              <div className="dots"><span/><span/><span/></div>
+              <span>Claude is crafting your personalized recipe…</span>
+            </div>
+          )}
+          {text && (
+            <div className="recipe-md" dangerouslySetInnerHTML={{ __html: html }} />
+          )}
+          {isStreaming && !isThinking && text && (
+            <span className="stream-cursor" aria-hidden="true" />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ── App ── */
+  function App() {
+    const [apiKey,      setApiKey]      = useState(() => sessionStorage.getItem('ff_key') || '');
+    const [showKey,     setShowKey]     = useState(false);
+    const [ingredients, setIngredients] = useState([]);
+    const [cuisine,     setCuisine]     = useState('');
+    const [recipeText,  setRecipeText]  = useState('');
+    const [isLoading,   setIsLoading]   = useState(false);
+    const [isThinking,  setIsThinking]  = useState(false);
+    const [error,       setError]       = useState('');
+    const [showPanel,   setShowPanel]   = useState(false);
+    const [meta,        setMeta]        = useState(null);
+    const abortRef = useRef(null);
+
+    useEffect(() => {
+      if (apiKey) sessionStorage.setItem('ff_key', apiKey);
+      else sessionStorage.removeItem('ff_key');
+    }, [apiKey]);
+
+    async function getRecipe() {
+      if (!apiKey.trim()) return setError('Please enter your Anthropic API key.');
+      if (!ingredients.length) return setError('Add at least one ingredient.');
+
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
+      setIsLoading(true);
+      setIsThinking(true);
+      setError('');
+      setRecipeText('');
+      setShowPanel(true);
+      setMeta({ ingredients: [...ingredients], cuisine: cuisine || '' });
+
+      const system = `You are a professional nutritionist and chef who creates \
+healthy, delicious recipes. Always structure your response using clear markdown \
+with these sections:
+# [Creative Recipe Name]
+Brief appealing description and key health benefits.
+## ⏱ Quick Info
+Prep time, cook time, servings.
+## 🥗 Nutritional Highlights
+Key nutrients and health benefits in a short list.
+## 🛒 Ingredients
+Full ingredients list with precise measurements.
+## 👨‍🍳 Instructions
+Numbered, clear step-by-step instructions.
+## 💡 Chef's Tips
+2-3 practical tips or variations.
+Keep the tone warm, encouraging, and health-focused.`;
+
+      const prompt = `Create a healthy${cuisine ? ' ' + cuisine : ''} recipe using \
+these ingredients: ${ingredients.join(', ')}.
+
+Make it genuinely nutritious, practical, and delicious. Include all the sections \
+from the format. Emphasize the health benefits and any smart substitutions.`;
+
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey.trim(),
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-opus-4-6',
+            max_tokens: 2048,
+            stream: true,
+            thinking: { type: 'adaptive' },
+            system,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+          signal: abortRef.current.signal,
+        });
+
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          throw new Error(body?.error?.message || `API error ${resp.status}: ${resp.statusText}`);
+        }
+
+        const reader  = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let blockType = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const t = line.trim();
+            if (!t.startsWith('data: ')) continue;
+
+            const raw = t.slice(6);
+            if (raw === '[DONE]') continue;
+
+            let ev;
+            try { ev = JSON.parse(raw); } catch { continue; }
+
+            switch (ev.type) {
+              case 'content_block_start':
+                blockType = ev.content_block?.type ?? null;
+                if (blockType === 'text') setIsThinking(false);
+                break;
+
+              case 'content_block_delta':
+                if (blockType === 'text' && ev.delta?.type === 'text_delta') {
+                  setRecipeText(prev => prev + ev.delta.text);
+                }
+                break;
+
+              case 'message_stop':
+                setIsThinking(false);
+                break;
+
+              case 'error':
+                throw new Error(ev.error?.message || 'Stream error from API');
+            }
+          }
+        }
+
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.error(err);
+        setError(err.message || 'Something went wrong. Check your API key and try again.');
+        setIsThinking(false);
+        if (!recipeText) setShowPanel(false);
+      } finally {
+        setIsLoading(false);
+        setIsThinking(false);
+      }
+    }
+
+    return (
+      <div className="app">
+        {/* Header */}
+        <header className="header">
+          <div className="header-brand">
+            <span className="leaf">🥗</span>FridgeFit
+          </div>
+          <p className="header-tagline">
+            Turn your ingredients into a healthy, delicious recipe — powered by AI
+          </p>
+        </header>
+
+        {/* Form Card */}
+        <div className="card">
+
+          {/* API Key */}
+          <div className="field-group">
+            <p className="field-label">🔑 Anthropic API Key</p>
+            <div className="api-key-wrap">
+              <input
+                className="api-key-input"
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                placeholder="sk-ant-api03-…"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                className="api-key-toggle"
+                type="button"
+                onClick={() => setShowKey(s => !s)}
+                aria-label={showKey ? 'Hide key' : 'Show key'}
+              >{showKey ? '🙈' : '👁️'}</button>
+            </div>
+            <div className="security-note">
+              <span className="icon">⚠️</span>
+              <span>
+                Your key is stored only in session memory and sent directly to Anthropic.
+                Clear it after use on shared devices.
+              </span>
+            </div>
+            <p className="field-hint">
+              Get your key at{' '}
+              <a href="https://console.anthropic.com" target="_blank" rel="noopener">
+                console.anthropic.com
+              </a>
+            </p>
+          </div>
+
+          {/* Ingredients */}
+          <div className="field-group">
+            <p className="field-label">🧺 Ingredients you have</p>
+            <IngredientInput tags={ingredients} setTags={setIngredients} />
+          </div>
+
+          {/* Cuisine — full width */}
+          <div className="field-group">
+            <p className="field-label">🌍 Cuisine Style</p>
+            <div className="select-wrap">
+              <select
+                className="select"
+                value={cuisine}
+                onChange={e => setCuisine(e.target.value)}
+              >
+                {CUISINES.map(c => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+              <span className="select-chevron">▼</span>
+            </div>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="error-box">
+              <span>⚠️</span>
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* CTA */}
+          <button
+            className="btn-primary"
+            onClick={getRecipe}
+            disabled={isLoading}
+            type="button"
+          >
+            {isLoading ? (
+              <>
+                <span className="btn-dots">
+                  <span>·</span><span>·</span><span>·</span>
+                </span>
+                Generating recipe…
+              </>
+            ) : (
+              <>✨ Get Healthy Recipe</>
+            )}
+          </button>
+        </div>
+
+        {/* Recipe panel */}
+        {showPanel && (
+          <RecipePanel
+            text={recipeText}
+            isThinking={isThinking}
+            isStreaming={isLoading}
+            meta={meta}
+          />
+        )}
+
+        <footer className="footer">
+          <p>Powered by Claude AI &mdash; FridgeFit helps you cook smarter &amp; healthier</p>
+        </footer>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
