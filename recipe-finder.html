@@ -478,6 +478,53 @@
       font-size: .78rem;
       color: var(--gray-400);
     }
+
+    /* ── Voice / Mic button ── */
+    .voice-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .4rem .9rem;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-full);
+      background: var(--white);
+      color: var(--gray-600);
+      font-size: .8rem;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      line-height: 1;
+      transition: border-color .18s, color .18s, background .18s, box-shadow .18s;
+    }
+    .voice-btn:hover:not(:disabled) {
+      border-color: var(--green-500);
+      color: var(--green-700);
+      background: var(--green-50);
+    }
+    .voice-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .voice-btn.recording {
+      border-color: var(--red-600);
+      color: var(--red-600);
+      background: var(--red-50);
+      animation: pulse-ring 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse-ring {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.25); }
+      50%       { box-shadow: 0 0 0 6px rgba(220,38,38,0); }
+    }
+    .voice-row {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      margin-top: .5rem;
+    }
+    .transcribing-label {
+      font-size: .775rem;
+      color: var(--green-700);
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+    }
   </style>
 </head>
 <body>
@@ -603,22 +650,33 @@
 
   /* ── App ── */
   function App() {
-    const [apiKey,      setApiKey]      = useState(() => sessionStorage.getItem('ff_key') || '');
-    const [showKey,     setShowKey]     = useState(false);
-    const [ingredients, setIngredients] = useState([]);
-    const [cuisine,     setCuisine]     = useState('');
-    const [recipeText,  setRecipeText]  = useState('');
-    const [isLoading,   setIsLoading]   = useState(false);
-    const [isThinking,  setIsThinking]  = useState(false);
-    const [error,       setError]       = useState('');
-    const [showPanel,   setShowPanel]   = useState(false);
-    const [meta,        setMeta]        = useState(null);
-    const abortRef = useRef(null);
+    const [apiKey,         setApiKey]         = useState(() => sessionStorage.getItem('ff_key') || '');
+    const [showKey,        setShowKey]        = useState(false);
+    const [elevenKey,      setElevenKey]      = useState(() => sessionStorage.getItem('ff_el_key') || '');
+    const [showElevenKey,  setShowElevenKey]  = useState(false);
+    const [ingredients,    setIngredients]    = useState([]);
+    const [cuisine,        setCuisine]        = useState('');
+    const [recipeText,     setRecipeText]     = useState('');
+    const [isLoading,      setIsLoading]      = useState(false);
+    const [isThinking,     setIsThinking]     = useState(false);
+    const [isRecording,    setIsRecording]    = useState(false);
+    const [isTranscribing, setIsTranscribing] = useState(false);
+    const [error,          setError]          = useState('');
+    const [showPanel,      setShowPanel]      = useState(false);
+    const [meta,           setMeta]           = useState(null);
+    const abortRef         = useRef(null);
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef   = useRef([]);
 
     useEffect(() => {
       if (apiKey) sessionStorage.setItem('ff_key', apiKey);
       else sessionStorage.removeItem('ff_key');
     }, [apiKey]);
+
+    useEffect(() => {
+      if (elevenKey) sessionStorage.setItem('ff_el_key', elevenKey);
+      else sessionStorage.removeItem('ff_el_key');
+    }, [elevenKey]);
 
     async function getRecipe() {
       if (!apiKey.trim()) return setError('Please enter your Anthropic API key.');
@@ -739,6 +797,72 @@ from the format. Emphasize the health benefits and any smart substitutions.`;
       }
     }
 
+    async function toggleRecording() {
+      if (isRecording) {
+        mediaRecorderRef.current?.stop();
+        return;
+      }
+      setError('');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunksRef.current = [];
+        const mr = new MediaRecorder(stream);
+        mediaRecorderRef.current = mr;
+        mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+        mr.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          setIsRecording(false);
+          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          await transcribeAudio(blob);
+        };
+        mr.start();
+        setIsRecording(true);
+      } catch (err) {
+        setError('Microphone access denied. Please allow microphone access in your browser and try again.');
+      }
+    }
+
+    async function transcribeAudio(blob) {
+      if (!elevenKey.trim()) {
+        setError('Please enter your ElevenLabs API key to use voice input.');
+        return;
+      }
+      setIsTranscribing(true);
+      try {
+        const form = new FormData();
+        form.append('file', blob, 'recording.webm');
+        form.append('model_id', 'scribe_v1');
+        const resp = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+          method: 'POST',
+          headers: { 'xi-api-key': elevenKey.trim() },
+          body: form,
+        });
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          throw new Error(body?.detail?.message || `ElevenLabs error ${resp.status}`);
+        }
+        const data = await resp.json();
+        const text = (data.text || '').trim();
+        if (text) {
+          const parts = text
+            .split(/[,;]|\band\b/i)
+            .map(s => s.trim().replace(/[.!?]+$/, '').trim())
+            .filter(s => s.length > 1);
+          setIngredients(prev => {
+            const next = [...prev];
+            for (const p of parts) {
+              if (!next.some(x => x.toLowerCase() === p.toLowerCase())) next.push(p);
+            }
+            return next;
+          });
+        }
+      } catch (err) {
+        setError('Transcription failed: ' + (err.message || 'Unknown error'));
+      } finally {
+        setIsTranscribing(false);
+      }
+    }
+
     return (
       <div className="app">
         {/* Header */}
@@ -789,10 +913,59 @@ from the format. Emphasize the health benefits and any smart substitutions.`;
             </p>
           </div>
 
+          {/* ElevenLabs API Key */}
+          <div className="field-group">
+            <p className="field-label">
+              🎙️ ElevenLabs API Key
+              <span style={{fontWeight:400,color:'var(--gray-400)',fontSize:'.8em'}}>(for voice input)</span>
+            </p>
+            <div className="api-key-wrap">
+              <input
+                className="api-key-input"
+                type={showElevenKey ? 'text' : 'password'}
+                value={elevenKey}
+                onChange={e => setElevenKey(e.target.value)}
+                placeholder="sk_…"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                className="api-key-toggle"
+                type="button"
+                onClick={() => setShowElevenKey(s => !s)}
+                aria-label={showElevenKey ? 'Hide key' : 'Show key'}
+              >{showElevenKey ? '🙈' : '👁️'}</button>
+            </div>
+            <p className="field-hint">
+              Get your key at{' '}
+              <a href="https://elevenlabs.io" target="_blank" rel="noopener">elevenlabs.io</a>
+              {' '}— used only for voice-to-text transcription
+            </p>
+          </div>
+
           {/* Ingredients */}
           <div className="field-group">
             <p className="field-label">🧺 Ingredients you have</p>
             <IngredientInput tags={ingredients} setTags={setIngredients} />
+            <div className="voice-row">
+              <button
+                className={`voice-btn${isRecording ? ' recording' : ''}`}
+                onClick={toggleRecording}
+                disabled={isTranscribing}
+                type="button"
+                title={elevenKey ? 'Click to speak your ingredients' : 'Add your ElevenLabs API key above to enable voice input'}
+              >
+                {isRecording ? '⏹ Stop recording' : '🎙️ Speak ingredients'}
+              </button>
+              {isTranscribing && (
+                <span className="transcribing-label">
+                  <span className="dots">
+                    <span/><span/><span/>
+                  </span>
+                  Transcribing…
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Cuisine — full width */}
