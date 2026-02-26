@@ -23,6 +23,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.get('/', (_req, res) => res.sendFile(__dirname + '/agentmatt.html'));
 app.use(express.static('.'));
 
 // ─── Runtime Config (hydrated from env, overridable via UI) ──────────────────
