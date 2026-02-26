@@ -222,7 +222,10 @@
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
-const SERVER = 'http://localhost:3001';
+// Use relative URLs when deployed (same origin), localhost when developing locally
+const SERVER = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3001'
+  : window.location.origin;
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
