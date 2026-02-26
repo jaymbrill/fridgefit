@@ -35,7 +35,7 @@ let cfg = {
   elevenLabsApiKey:  process.env.ELEVENLABS_API_KEY   || '',
   elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID  || '',
   anthropicApiKey:   process.env.ANTHROPIC_API_KEY    || '',
-  publicUrl:         process.env.PUBLIC_URL           || `http://localhost:${PORT}`,
+  publicUrl:         process.env.PUBLIC_URL           || process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`,
   providerName:      process.env.PROVIDER_NAME        || 'Matt',
 };
 
