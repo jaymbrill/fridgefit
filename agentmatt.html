@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentMatt — Voice Check-In</title>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --surface2: #293548;
+      --border:   #334155;
+      --blue:     #3b82f6;
+      --blue-d:   #2563eb;
+      --green:    #10b981;
+      --red:      #ef4444;
+      --yellow:   #f59e0b;
+      --purple:   #8b5cf6;
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --sidebar:  200px;
+    }
+
+    html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+
+    #root { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    .sidebar {
+      width: var(--sidebar); min-width: var(--sidebar);
+      background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow-y: auto;
+    }
+    .sidebar-logo {
+      padding: 20px 16px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo h1 { font-size: 18px; font-weight: 700; color: var(--blue); letter-spacing: -0.3px; }
+    .sidebar-logo p  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; cursor: pointer; border-radius: 0;
+      color: var(--muted); font-size: 13px; font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .nav-item:hover    { background: var(--surface2); color: var(--text); }
+    .nav-item.active   { background: var(--surface2); color: var(--blue); border-left-color: var(--blue); }
+    .nav-item .icon    { font-size: 16px; width: 20px; text-align: center; }
+
+    .sidebar-section { padding: 8px 16px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-top: 8px; }
+
+    .sidebar-footer { margin-top: auto; padding: 12px 16px; border-top: 1px solid var(--border); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .status-dot.ok  { background: var(--green); }
+    .status-dot.err { background: var(--red); }
+    .status-dot.warn { background: var(--yellow); }
+
+    /* ── Main ────────────────────────────────────────────────── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    .topbar {
+      padding: 14px 24px; border-bottom: 1px solid var(--border);
+      background: var(--surface); display: flex; align-items: center; justify-content: space-between;
+      min-height: 56px;
+    }
+    .topbar h2 { font-size: 16px; font-weight: 600; }
+
+    .content { flex: 1; overflow-y: auto; padding: 24px; }
+
+    /* ── Active Call Banner ──────────────────────────────────── */
+    .call-banner {
+      background: linear-gradient(90deg, #1a3a2a, #1e293b);
+      border-bottom: 1px solid var(--green);
+      padding: 10px 24px; display: flex; align-items: center; gap: 16px;
+      animation: pulse-border 2s infinite;
+    }
+    @keyframes pulse-border {
+      0%, 100% { border-bottom-color: var(--green); }
+      50%       { border-bottom-color: #34d399; }
+    }
+    .call-banner .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* ── Cards ───────────────────────────────────────────────── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px;
+    }
+    .card + .card { margin-top: 16px; }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+
+    /* ── Stat grid ───────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; }
+    .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    .stat-card .sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Tables ──────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th { padding: 8px 12px; text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+    tbody td { padding: 12px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--surface2); }
+
+    /* ── Badges ──────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center; padding: 2px 8px;
+      border-radius: 9999px; font-size: 11px; font-weight: 600;
+    }
+    .badge-red    { background: #450a0a; color: #fca5a5; }
+    .badge-yellow { background: #451a03; color: #fcd34d; }
+    .badge-green  { background: #052e16; color: #6ee7b7; }
+    .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+    .badge-gray   { background: var(--surface2); color: var(--muted); }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: none; transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary  { background: var(--blue);   color: #fff; }
+    .btn-primary:hover:not(:disabled)  { background: var(--blue-d); }
+    .btn-danger   { background: var(--red);    color: #fff; }
+    .btn-danger:hover:not(:disabled)   { opacity: 0.85; }
+    .btn-success  { background: var(--green);  color: #fff; }
+    .btn-success:hover:not(:disabled)  { opacity: 0.85; }
+    .btn-ghost    { background: transparent;   color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled)    { background: var(--surface2); color: var(--text); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* ── Forms ───────────────────────────────────────────────── */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%; padding: 9px 12px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 7px; color: var(--text);
+      font-size: 13px; font-family: inherit;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus { border-color: var(--blue); }
+    .form-group textarea { resize: vertical; min-height: 70px; }
+    select option { background: var(--surface); }
+
+    /* ── Modal ───────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; width: 480px; max-width: 95vw;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal h3 { font-size: 15px; font-weight: 600; margin-bottom: 18px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    /* ── Transcript ──────────────────────────────────────────── */
+    .transcript { display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto; }
+    .msg { padding: 10px 14px; border-radius: 10px; max-width: 85%; font-size: 13px; line-height: 1.5; }
+    .msg-agent   { background: #1e3a5f; color: #bfdbfe; align-self: flex-start; border-radius: 10px 10px 10px 2px; }
+    .msg-patient { background: var(--surface2); color: var(--text); align-self: flex-end; border-radius: 10px 10px 2px 10px; }
+    .msg-time { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Question builder ────────────────────────────────────── */
+    .q-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+    }
+    .q-num { font-size: 11px; font-weight: 700; color: var(--muted); min-width: 24px; }
+    .q-text { flex: 1; font-size: 13px; }
+
+    /* ── Voice lab ───────────────────────────────────────────── */
+    .voice-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px; margin-bottom: 10px;
+      cursor: pointer; transition: border-color 0.15s;
+    }
+    .voice-card:hover     { border-color: var(--blue); }
+    .voice-card.selected  { border-color: var(--blue); background: #1e3a5f44; }
+    .voice-card .vname    { font-weight: 600; font-size: 13px; }
+    .voice-card .vcategory { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Misc ────────────────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
+    .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; }
+    .row { display: flex; gap: 12px; }
+    .row .form-group { flex: 1; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .alert { padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+    .alert-warning { background: #451a03; border: 1px solid #92400e; color: #fcd34d; }
+    .alert-info    { background: #1e3a5f; border: 1px solid #1d4ed8; color: #93c5fd; }
+    .alert-success { background: #052e16; border: 1px solid #065f46; color: #6ee7b7; }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const SERVER = 'http://localhost:3001';
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
+
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(SERVER + path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+
+function useLocalStorage(key, initial) {
+  const [val, setVal] = useState(() => {
+    try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : initial; }
+    catch { return initial; }
+  });
+  const save = useCallback((v) => {
+    const next = typeof v === 'function' ? v(val) : v;
+    setVal(next);
+    localStorage.setItem(key, JSON.stringify(next));
+  }, [key, val]);
+  return [val, save];
+}
+
+// ─── Icon components ──────────────────────────────────────────────────────────
+const icons = {
+  dashboard: '🏠', patients: '👥', script: '📋',
+  voice: '🎙️', settings: '⚙️', history: '📞',
+  phone: '📱', add: '＋', edit: '✏️', del: '🗑️',
+  play: '▶', stop: '⏹', check: '✓', warn: '⚠️',
+};
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+function fmtDuration(start, end) {
+  if (!start || !end) return '—';
+  const s = Math.round((new Date(end) - new Date(start)) / 1000);
+  const m = Math.floor(s / 60), ss = s % 60;
+  return `${m}:${String(ss).padStart(2, '0')}`;
+}
+
+function RiskBadge({ level }) {
+  const cls = level === 'High' ? 'badge-red' : level === 'Medium' ? 'badge-yellow' : 'badge-green';
+  return <span className={`badge ${cls}`}>{level}</span>;
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    initiated: ['badge-blue', 'Initiated'],
+    'in-progress': ['badge-yellow', 'In Progress'],
+    'in_conversation': ['badge-yellow', 'Talking'],
+    completed: ['badge-green', 'Completed'],
+    failed: ['badge-red', 'Failed'],
+    'no-answer': ['badge-gray', 'No Answer'],
+    busy: ['badge-gray', 'Busy'],
+    canceled: ['badge-gray', 'Canceled'],
+  };
+  const [cls, label] = map[status?.toLowerCase()] || ['badge-gray', status || 'Unknown'];
+  return <span className={`badge ${cls}`}>{label}</span>;
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h3>{title}</h3>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+function Dashboard({ patients, questions, callHistory, activeCalls, onNavigate, onStartCall }) {
+  const todayCalls = callHistory.filter(c => fmtDate(c.startTime) === fmtDate(new Date().toISOString()));
+  const completedToday = todayCalls.filter(c => c.status === 'completed').length;
+
+  return (
+    <div>
+      <div className="stat-grid" style={{ marginBottom: 24 }}>
+        <div className="stat-card">
+          <div className="label">Patients</div>
+          <div className="value" style={{ color: 'var(--blue)' }}>{patients.length}</div>
+          <div className="sub">registered</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Calls Today</div>
+          <div className="value" style={{ color: 'var(--green)' }}>{todayCalls.length}</div>
+          <div className="sub">{completedToday} completed</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Active Calls</div>
+          <div className="value" style={{ color: activeCalls.length > 0 ? 'var(--yellow)' : 'var(--muted)' }}>
+            {activeCalls.length}
+          </div>
+          <div className="sub">in progress</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Questions</div>
+          <div className="value" style={{ color: 'var(--purple)' }}>{questions.length}</div>
+          <div className="sub">in script</div>
+        </div>
+      </div>
+
+      {activeCalls.length > 0 && (
+        <div className="card" style={{ marginBottom: 16, borderColor: 'var(--green)' }}>
+          <div className="card-title">🟢 Active Calls</div>
+          {activeCalls.map(c => (
+            <div key={c.callSid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
+              <div>
+                <strong>{c.patientName}</strong>
+                <span style={{ color: 'var(--muted)', marginLeft: 8, fontSize: 12 }}>{c.phone}</span>
+              </div>
+              <StatusBadge status={c.status} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="row">
+        <div style={{ flex: 1 }}>
+          <div className="card">
+            <div className="card-title">Quick Call</div>
+            {patients.length === 0 ? (
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                No patients yet. <a href="#" onClick={() => onNavigate('patients')} style={{ color: 'var(--blue)' }}>Add a patient</a> to get started.
+              </div>
+            ) : questions.length === 0 ? (
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                No questions in script. <a href="#" onClick={() => onNavigate('script')} style={{ color: 'var(--blue)' }}>Build your script</a> first.
+              </div>
+            ) : (
+              <div>
+                <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12 }}>
+                  Select a patient to begin a medication check-in call.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {patients.slice(0, 5).map(p => (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div>
+                        <strong style={{ fontSize: 13 }}>{p.name}</strong>
+                        <RiskBadge level={p.riskLevel} />
+                        <span style={{ marginLeft: 8 }} />
+                        <span style={{ color: 'var(--muted)', fontSize: 12 }}>{p.phone}</span>
+                      </div>
+                      <button className="btn btn-success btn-sm" onClick={() => onStartCall(p)}>
+                        {icons.phone} Call
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {patients.length > 5 && (
+                  <button className="btn btn-ghost btn-sm" style={{ marginTop: 10 }} onClick={() => onNavigate('patients')}>
+                    View all {patients.length} patients →
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <div className="card">
+            <div className="card-title">Recent Activity</div>
+            {callHistory.length === 0 ? (
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>No calls yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {callHistory.slice(0, 6).map(c => (
+                  <div key={c.callSid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                    <div>
+                      <strong>{c.patientName}</strong>
+                      <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 11 }}>{fmtDate(c.startTime)} {fmtTime(c.startTime)}</span>
+                    </div>
+                    <StatusBadge status={c.status || c.outcome} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Patients ─────────────────────────────────────────────────────────────────
+
+function PatientsPage({ patients, onSave, onDelete, onCall, questions }) {
+  const [modal, setModal] = useState(null); // null | 'add' | patient obj
+  const [form, setForm]   = useState({});
+
+  function openAdd() { setForm({ riskLevel: 'High' }); setModal('add'); }
+  function openEdit(p) { setForm({ ...p }); setModal(p); }
+  function close() { setModal(null); setForm({}); }
+
+  function handleSave() {
+    if (!form.name || !form.phone) return alert('Name and phone are required.');
+    onSave({ ...form, id: form.id || crypto.randomUUID() });
+    close();
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button className="btn btn-primary" onClick={openAdd}>{icons.add} Add Patient</button>
+      </div>
+
+      {patients.length === 0 ? (
+        <div className="empty-state">
+          <div className="icon">👤</div>
+          <p>No patients yet. Add your first high-risk patient to begin.</p>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Risk</th>
+                <th>Medications</th>
+                <th>Notes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {patients.map(p => (
+                <tr key={p.id}>
+                  <td><strong>{p.name}</strong></td>
+                  <td style={{ color: 'var(--muted)' }}>{p.phone}</td>
+                  <td><RiskBadge level={p.riskLevel} /></td>
+                  <td style={{ color: 'var(--muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.medications || '—'}</td>
+                  <td style={{ color: 'var(--muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.notes || '—'}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-success btn-sm" onClick={() => onCall(p)} disabled={questions.length === 0} title={questions.length === 0 ? 'Add questions first' : ''}>
+                        {icons.phone}
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)}>{icons.edit}</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { if(confirm(`Remove ${p.name}?`)) onDelete(p.id); }}>{icons.del}</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modal && (
+        <Modal title={modal === 'add' ? 'Add Patient' : 'Edit Patient'} onClose={close}>
+          <div className="row">
+            <div className="form-group">
+              <label>Full Name *</label>
+              <input value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Jane Smith" />
+            </div>
+            <div className="form-group">
+              <label>Phone Number *</label>
+              <input value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 000 0000" />
+            </div>
+          </div>
+          <div className="row">
+            <div className="form-group">
+              <label>Risk Level</label>
+              <select value={form.riskLevel || 'High'} onChange={e => setForm(f => ({ ...f, riskLevel: e.target.value }))}>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Date of Birth</label>
+              <input type="date" value={form.dob || ''} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Current Medications</label>
+            <input value={form.medications || ''} onChange={e => setForm(f => ({ ...f, medications: e.target.value }))} placeholder="Lisinopril 10mg, Metformin 500mg..." />
+          </div>
+          <div className="form-group">
+            <label>Clinical Notes</label>
+            <textarea value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Relevant context for the AI conversation..." />
+          </div>
+          <div className="modal-actions">
+            <button className="btn btn-ghost" onClick={close}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleSave}>Save Patient</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── Script Builder ───────────────────────────────────────────────────────────
+
+function ScriptPage({ questions, onSave }) {
+  const [items, setItems] = useState(questions);
+  const [newQ, setNewQ]   = useState('');
+  const [editIdx, setEditIdx] = useState(null);
+  const [editText, setEditText] = useState('');
+
+  useEffect(() => { setItems(questions); }, [questions]);
+
+  function addQuestion() {
+    if (!newQ.trim()) return;
+    const next = [...items, newQ.trim()];
+    setItems(next);
+    onSave(next);
+    setNewQ('');
+  }
+  function deleteQ(i) {
+    const next = items.filter((_, idx) => idx !== i);
+    setItems(next);
+    onSave(next);
+  }
+  function startEdit(i) { setEditIdx(i); setEditText(items[i]); }
+  function saveEdit() {
+    const next = items.map((q, i) => i === editIdx ? editText : q);
+    setItems(next);
+    onSave(next);
+    setEditIdx(null);
+  }
+  function moveUp(i) {
+    if (i === 0) return;
+    const next = [...items];
+    [next[i-1], next[i]] = [next[i], next[i-1]];
+    setItems(next);
+    onSave(next);
+  }
+  function moveDown(i) {
+    if (i === items.length - 1) return;
+    const next = [...items];
+    [next[i], next[i+1]] = [next[i+1], next[i]];
+    setItems(next);
+    onSave(next);
+  }
+
+  const templates = [
+    "Have you taken all of your medications today?",
+    "Are you experiencing any side effects from your medications?",
+    "Have you checked your blood pressure today, and if so, what was the reading?",
+    "How have your blood sugar levels been this week?",
+    "Are you having any chest pain, shortness of breath, or dizziness?",
+    "Have you had any falls or near-falls since we last spoke?",
+    "Are you following the diet and fluid restrictions we discussed?",
+    "Do you have any questions or concerns about your medications?",
+  ];
+
+  return (
+    <div>
+      <div className="alert alert-info" style={{ marginBottom: 20 }}>
+        Claude will ask these questions in order during the call, then follow up naturally on responses. Keep questions concise and one-topic each.
+      </div>
+
+      {items.length === 0 && (
+        <div className="empty-state" style={{ marginBottom: 20 }}>
+          <div className="icon">📋</div>
+          <p>No questions yet. Add your own or use a template below.</p>
+        </div>
+      )}
+
+      {items.map((q, i) => (
+        <div className="q-item" key={i}>
+          <span className="q-num">{i + 1}</span>
+          {editIdx === i ? (
+            <>
+              <input
+                style={{ flex: 1, padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--blue)', borderRadius: 6, color: 'var(--text)', fontSize: 13 }}
+                value={editText}
+                onChange={e => setEditText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveEdit()}
+                autoFocus
+              />
+              <button className="btn btn-primary btn-sm" onClick={saveEdit}>Save</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditIdx(null)}>✕</button>
+            </>
+          ) : (
+            <>
+              <span className="q-text">{q}</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => moveUp(i)} disabled={i === 0}>↑</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => moveDown(i)} disabled={i === items.length - 1}>↓</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => startEdit(i)}>{icons.edit}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => deleteQ(i)}>{icons.del}</button>
+            </>
+          )}
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        <input
+          style={{ flex: 1, padding: '9px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text)', fontSize: 13 }}
+          placeholder="Type a question and press Enter..."
+          value={newQ}
+          onChange={e => setNewQ(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && addQuestion()}
+        />
+        <button className="btn btn-primary" onClick={addQuestion} disabled={!newQ.trim()}>{icons.add} Add</button>
+      </div>
+
+      <hr className="divider" />
+      <div className="card-title">Quick-Add Templates</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        {templates.filter(t => !items.includes(t)).map((t, i) => (
+          <button key={i} className="btn btn-ghost btn-sm" onClick={() => { const next = [...items, t]; setItems(next); onSave(next); }}
+            style={{ textAlign: 'left', maxWidth: '100%', whiteSpace: 'normal', height: 'auto', padding: '6px 10px' }}>
+            {icons.add} {t}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Voice Lab ────────────────────────────────────────────────────────────────
+
+function VoiceLabPage({ serverConfig }) {
+  const [voices, setVoices]       = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [previewText, setPreviewText] = useState("Hi there, this is a check-in call. I just wanted to see how you're doing today and ask you a few quick questions.");
+  const [audioUrl, setAudioUrl]   = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [err, setErr]             = useState(null);
+  const audioRef                  = useRef(null);
+
+  async function loadVoices() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const data = await api('GET', '/api/voice/voices');
+      setVoices(data);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function generatePreview() {
+    setGenerating(true);
+    setErr(null);
+    try {
+      const data = await api('POST', '/api/voice/preview', { text: previewText });
+      setAudioUrl(data.audioUrl);
+      setTimeout(() => audioRef.current?.play(), 100);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="alert alert-info" style={{ marginBottom: 20 }}>
+        Voice profiles are created in <strong>ElevenLabs</strong> (app.elevenlabs.io → Voices → Add Voice). Paste your Voice ID in Settings, then test it here.
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Voice Preview</div>
+        <div className="form-group">
+          <label>Test Text</label>
+          <textarea
+            value={previewText}
+            onChange={e => setPreviewText(e.target.value)}
+            rows={3}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn btn-primary" onClick={generatePreview} disabled={generating}>
+            {generating ? '⏳ Generating...' : `${icons.play} Generate Preview`}
+          </button>
+          {audioUrl && (
+            <button className="btn btn-ghost btn-sm" onClick={() => audioRef.current?.play()}>
+              {icons.play} Play Again
+            </button>
+          )}
+        </div>
+        {audioUrl && <audio ref={audioRef} src={audioUrl} style={{ display: 'none' }} controls />}
+        {err && <div className="alert alert-warning" style={{ marginTop: 12 }}>{err}</div>}
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div className="card-title" style={{ marginBottom: 0 }}>Your ElevenLabs Voices</div>
+          <button className="btn btn-ghost btn-sm" onClick={loadVoices} disabled={loading}>
+            {loading ? 'Loading...' : '↻ Load Voices'}
+          </button>
+        </div>
+
+        {voices.length === 0 && !loading && (
+          <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+            Click "Load Voices" to see your ElevenLabs voice library. Configure your API key in Settings first.
+          </div>
+        )}
+
+        {voices.map(v => (
+          <div key={v.id} className={`voice-card ${serverConfig?.elevenLabsVoiceId === v.id ? 'selected' : ''}`}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div className="vname">{v.name}</div>
+                <div className="vcategory">{v.category} · ID: <code style={{ fontSize: 11 }}>{v.id}</code></div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {serverConfig?.elevenLabsVoiceId === v.id && <span className="badge badge-green">Active</span>}
+                {v.preview && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => { const a = new Audio(v.preview); a.play(); }}>
+                    {icons.play} Preview
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+function SettingsPage({ onConfigSaved }) {
+  const [form, setForm] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved]   = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api('GET', '/api/config')
+      .then(data => { setForm(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api('POST', '/api/config', form);
+      setSaved(true);
+      onConfigSaved(form);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const F = (key) => ({
+    value: form[key] || '',
+    onChange: e => setForm(f => ({ ...f, [key]: e.target.value }))
+  });
+
+  if (loading) return <div style={{ color: 'var(--muted)' }}>Loading...</div>;
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Provider Identity</div>
+        <div className="form-group">
+          <label>Provider Name (your name as it will appear in prompts)</label>
+          <input {...F('providerName')} placeholder="Matt" />
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Twilio — Outbound Calls</div>
+        <div className="alert alert-info" style={{ marginBottom: 14 }}>
+          Get credentials at <strong>console.twilio.com</strong>. You need a phone number with Voice capability.
+        </div>
+        <div className="form-group">
+          <label>Account SID</label>
+          <input {...F('twilioAccountSid')} placeholder="ACxxxxxxxxxxxxxxxx" />
+        </div>
+        <div className="form-group">
+          <label>Auth Token</label>
+          <input type="password" {...F('twilioAuthToken')} placeholder="••••••••" />
+        </div>
+        <div className="form-group">
+          <label>Twilio Phone Number</label>
+          <input {...F('twilioPhoneNumber')} placeholder="+15550001234" />
+        </div>
+        <div className="form-group">
+          <label>Public Server URL (for Twilio webhooks)</label>
+          <input {...F('publicUrl')} placeholder="https://your-ngrok-url.ngrok.io" />
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+            Run <code>ngrok http 3001</code> and paste the https URL here. Required for Twilio to reach your server.
+          </p>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">ElevenLabs — Your Voice</div>
+        <div className="alert alert-info" style={{ marginBottom: 14 }}>
+          Create your voice clone at <strong>app.elevenlabs.io → Voices → Add Voice → Instant Voice Clone</strong>. Record 1–5 minutes of clear audio.
+        </div>
+        <div className="form-group">
+          <label>API Key</label>
+          <input type="password" {...F('elevenLabsApiKey')} placeholder="••••••••" />
+        </div>
+        <div className="form-group">
+          <label>Voice ID</label>
+          <input {...F('elevenLabsVoiceId')} placeholder="paste your voice ID here" />
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+            Found in ElevenLabs → Voices → click your voice → ID shown below the name. Or use Voice Lab to browse.
+          </p>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Anthropic — Claude AI</div>
+        <div className="alert alert-info" style={{ marginBottom: 14 }}>
+          Get your API key at <strong>console.anthropic.com</strong>.
+        </div>
+        <div className="form-group">
+          <label>API Key</label>
+          <input type="password" {...F('anthropicApiKey')} placeholder="sk-ant-••••••••" />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>
+          {saving ? 'Saving...' : 'Save Settings'}
+        </button>
+        {saved && <span style={{ color: 'var(--green)', fontSize: 13 }}>✓ Saved successfully</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Call History ──────────────────────────────────────────────────────────────
+
+function HistoryPage({ callHistory }) {
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <div>
+      {callHistory.length === 0 ? (
+        <div className="empty-state">
+          <div className="icon">📞</div>
+          <p>No call history yet. Start a call from the Dashboard or Patients page.</p>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Patient</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Transcript</th>
+              </tr>
+            </thead>
+            <tbody>
+              {callHistory.map(c => (
+                <tr key={c.callSid}>
+                  <td>
+                    <strong>{c.patientName}</strong>
+                    {c.riskLevel && <><br/><RiskBadge level={c.riskLevel} /></>}
+                  </td>
+                  <td style={{ color: 'var(--muted)' }}>{fmtDate(c.startTime)}</td>
+                  <td style={{ color: 'var(--muted)' }}>{fmtTime(c.startTime)}</td>
+                  <td style={{ color: 'var(--muted)' }}>{fmtDuration(c.startTime, c.endTime)}</td>
+                  <td><StatusBadge status={c.status || c.outcome} /></td>
+                  <td>
+                    {c.transcript && c.transcript.length > 0 ? (
+                      <button className="btn btn-ghost btn-sm" onClick={() => setSelected(c)}>
+                        View ({c.transcript.length} msgs)
+                      </button>
+                    ) : <span style={{ color: 'var(--muted)' }}>—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selected && (
+        <Modal title={`Transcript — ${selected.patientName}`} onClose={() => setSelected(null)}>
+          <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--muted)' }}>
+            {fmtDate(selected.startTime)} at {fmtTime(selected.startTime)} · Duration: {fmtDuration(selected.startTime, selected.endTime)}
+          </div>
+          <div className="transcript">
+            {selected.transcript.map((m, i) => (
+              <div key={i} style={{ alignSelf: m.speaker === 'agent' ? 'flex-start' : 'flex-end' }}>
+                <div className={`msg msg-${m.speaker === 'agent' ? 'agent' : 'patient'}`}>
+                  {m.text}
+                </div>
+                <div className="msg-time" style={{ textAlign: m.speaker === 'agent' ? 'left' : 'right' }}>
+                  {m.speaker === 'agent' ? 'Agent' : selected.patientName} · {fmtTime(m.ts)}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="modal-actions">
+            <button className="btn btn-ghost" onClick={() => setSelected(null)}>Close</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── Confirm Call Modal ───────────────────────────────────────────────────────
+
+function ConfirmCallModal({ patient, questions, onConfirm, onClose }) {
+  const [calling, setCalling]   = useState(false);
+  const [customQs, setCustomQs] = useState(questions);
+
+  async function handleCall() {
+    setCalling(true);
+    try {
+      await onConfirm(patient, customQs);
+      onClose();
+    } catch (e) {
+      alert('Failed to initiate call: ' + e.message);
+      setCalling(false);
+    }
+  }
+
+  return (
+    <Modal title={`Call ${patient.name}`} onClose={onClose}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+          <div><span style={{ color: 'var(--muted)' }}>Phone: </span><strong>{patient.phone}</strong></div>
+          <div><span style={{ color: 'var(--muted)' }}>Risk: </span><RiskBadge level={patient.riskLevel} /></div>
+        </div>
+        {patient.medications && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>Meds: {patient.medications}</div>}
+      </div>
+
+      <hr className="divider" />
+      <div style={{ marginBottom: 12, fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        Questions for this call ({customQs.length})
+      </div>
+      {customQs.map((q, i) => (
+        <div key={i} className="q-item" style={{ marginBottom: 6 }}>
+          <span className="q-num">{i + 1}</span>
+          <span className="q-text">{q}</span>
+        </div>
+      ))}
+
+      <div className="alert alert-warning" style={{ marginTop: 16 }}>
+        {icons.warn} This will place a real phone call to {patient.phone}. Make sure your Twilio and ngrok are configured.
+      </div>
+
+      <div className="modal-actions">
+        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-success" onClick={handleCall} disabled={calling}>
+          {calling ? '⏳ Dialing...' : `${icons.phone} Confirm & Call`}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Active Call Panel ────────────────────────────────────────────────────────
+
+function ActiveCallPanel({ call, onClose }) {
+  const [liveCall, setLiveCall] = useState(call);
+
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const fresh = await api('GET', `/api/calls/${call.callSid}`);
+        setLiveCall(fresh);
+        if (['completed', 'failed', 'no-answer', 'busy', 'canceled'].includes(fresh.status)) {
+          clearInterval(id);
+        }
+      } catch {}
+    }, 2500);
+    return () => clearInterval(id);
+  }, [call.callSid]);
+
+  const isActive = !['completed', 'failed', 'no-answer', 'busy', 'canceled'].includes(liveCall.status);
+
+  return (
+    <Modal title={`Live Call — ${liveCall.patientName}`} onClose={onClose}>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 13 }}>
+        <div><span style={{ color: 'var(--muted)' }}>Phone: </span>{liveCall.phone}</div>
+        <div><StatusBadge status={liveCall.status} /></div>
+        {liveCall.questions && (
+          <div><span style={{ color: 'var(--muted)' }}>Q: </span>{liveCall.currentQuestionIndex}/{liveCall.questions.length}</div>
+        )}
+      </div>
+
+      {isActive && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'var(--green)', fontSize: 13 }}>
+          <div className="dot" /> In progress — auto-refreshing...
+        </div>
+      )}
+
+      <div className="card-title">Transcript</div>
+      <div className="transcript" style={{ minHeight: 80 }}>
+        {(!liveCall.transcript || liveCall.transcript.length === 0) ? (
+          <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>
+            {isActive ? 'Waiting for conversation to begin...' : 'No transcript available.'}
+          </div>
+        ) : (
+          liveCall.transcript.map((m, i) => (
+            <div key={i} style={{ alignSelf: m.speaker === 'agent' ? 'flex-start' : 'flex-end' }}>
+              <div className={`msg msg-${m.speaker === 'agent' ? 'agent' : 'patient'}`}>{m.text}</div>
+              <div className="msg-time" style={{ textAlign: m.speaker === 'agent' ? 'left' : 'right' }}>
+                {m.speaker === 'agent' ? cfg?.providerName || 'Agent' : liveCall.patientName} · {fmtTime(m.ts)}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="modal-actions">
+        <button className="btn btn-ghost" onClick={onClose}>Close</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── App Shell ────────────────────────────────────────────────────────────────
+
+function App() {
+  const [view, setView]           = useState('dashboard');
+  const [patients, setPatients]   = useLocalStorage('agentmatt_patients', []);
+  const [questions, setQuestions] = useLocalStorage('agentmatt_questions', []);
+  const [callHistory, setCallHistory] = useState([]);
+  const [activeCalls, setActiveCalls] = useState([]);
+  const [callModal, setCallModal] = useState(null);  // patient to call
+  const [liveModal, setLiveModal] = useState(null);  // active call to watch
+  const [serverStatus, setServerStatus] = useState(null);
+  const [serverConfig, setServerConfig] = useState(null);
+
+  // Poll server for health + calls
+  useEffect(() => {
+    async function poll() {
+      try {
+        const [health, calls] = await Promise.all([
+          api('GET', '/api/health'),
+          api('GET', '/api/calls'),
+        ]);
+        setServerStatus(health);
+        const active = calls.filter(c => !['completed', 'failed', 'no-answer', 'busy', 'canceled'].includes(c.status));
+        const history = calls.filter(c => ['completed', 'failed', 'no-answer', 'busy', 'canceled'].includes(c.status));
+        setActiveCalls(active);
+        setCallHistory(history);
+      } catch {
+        setServerStatus(null);
+      }
+    }
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Load server config once
+  useEffect(() => {
+    api('GET', '/api/config').then(setServerConfig).catch(() => {});
+  }, []);
+
+  function savePatient(p) {
+    setPatients(prev => {
+      const idx = prev.findIndex(x => x.id === p.id);
+      return idx >= 0 ? prev.map(x => x.id === p.id ? p : x) : [...prev, p];
+    });
+  }
+  function deletePatient(id) {
+    setPatients(prev => prev.filter(p => p.id !== id));
+  }
+
+  async function initiateCall(patient, qs) {
+    const data = await api('POST', '/api/calls/initiate', {
+      patientName: patient.name,
+      phone:       patient.phone,
+      questions:   qs,
+      riskLevel:   patient.riskLevel,
+      notes:       patient.notes || '',
+    });
+    // Open live monitor
+    setLiveModal({ callSid: data.callSid, patientName: patient.name, phone: patient.phone, status: 'initiated', transcript: [], questions: qs, currentQuestionIndex: 0 });
+  }
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard',    icon: icons.dashboard },
+    { id: 'patients',  label: 'Patients',      icon: icons.patients  },
+    { id: 'script',    label: 'Script Builder', icon: icons.script   },
+    { id: 'voice',     label: 'Voice Lab',      icon: icons.voice    },
+    { id: 'history',   label: 'Call History',   icon: icons.history  },
+    { id: 'settings',  label: 'Settings',       icon: icons.settings },
+  ];
+
+  const pageTitles = {
+    dashboard: 'Dashboard',
+    patients:  'Patients',
+    script:    'Script Builder',
+    voice:     'Voice Lab',
+    history:   'Call History',
+    settings:  'Settings',
+  };
+
+  const serverOk = !!serverStatus;
+  const configured = serverStatus?.configured;
+
+  return (
+    <div id="root">
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <h1>AgentMatt</h1>
+          <p>Voice Check-In</p>
+        </div>
+
+        <div className="sidebar-section">Navigation</div>
+        {navItems.map(n => (
+          <div key={n.id} className={`nav-item ${view === n.id ? 'active' : ''}`} onClick={() => setView(n.id)}>
+            <span className="icon">{n.icon}</span>
+            {n.label}
+            {n.id === 'patients' && patients.length > 0 && (
+              <span className="badge badge-blue" style={{ marginLeft: 'auto', fontSize: 10, padding: '1px 6px' }}>{patients.length}</span>
+            )}
+          </div>
+        ))}
+
+        <div className="sidebar-footer">
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
+            <span className={`status-dot ${serverOk ? 'ok' : 'err'}`} />
+            {serverOk ? 'Server connected' : 'Server offline'}
+          </div>
+          {serverOk && (
+            <>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                <span className={`status-dot ${configured?.twilio ? 'ok' : 'warn'}`} />
+                Twilio {configured?.twilio ? 'ready' : 'not set'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                <span className={`status-dot ${configured?.elevenLabs ? 'ok' : 'warn'}`} />
+                ElevenLabs {configured?.elevenLabs ? 'ready' : 'not set'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                <span className={`status-dot ${configured?.anthropic ? 'ok' : 'warn'}`} />
+                Claude {configured?.anthropic ? 'ready' : 'not set'}
+              </div>
+            </>
+          )}
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div className="main">
+        {/* Active call banner */}
+        {activeCalls.length > 0 && (
+          <div className="call-banner">
+            <div className="dot" />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--green)' }}>
+              {activeCalls.length} active call{activeCalls.length > 1 ? 's' : ''}
+            </span>
+            {activeCalls.map(c => (
+              <button key={c.callSid} className="btn btn-ghost btn-sm" style={{ borderColor: 'var(--green)', color: 'var(--green)' }}
+                onClick={() => setLiveModal(c)}>
+                {icons.phone} {c.patientName}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Server offline warning */}
+        {!serverOk && (
+          <div className="alert alert-warning" style={{ margin: '12px 24px 0', borderRadius: 8 }}>
+            {icons.warn} Cannot reach the AgentMatt server at <code>localhost:3001</code>. Run: <code>node agentmatt-server.js</code>
+          </div>
+        )}
+
+        <div className="topbar">
+          <h2>{pageTitles[view]}</h2>
+          {(view === 'dashboard' || view === 'patients') && patients.length > 0 && questions.length > 0 && (
+            <button className="btn btn-success" onClick={() => setView('patients')}>
+              {icons.phone} New Call
+            </button>
+          )}
+        </div>
+
+        <div className="content">
+          {view === 'dashboard' && (
+            <Dashboard
+              patients={patients}
+              questions={questions}
+              callHistory={callHistory}
+              activeCalls={activeCalls}
+              onNavigate={setView}
+              onStartCall={p => setCallModal(p)}
+            />
+          )}
+          {view === 'patients' && (
+            <PatientsPage
+              patients={patients}
+              onSave={savePatient}
+              onDelete={deletePatient}
+              onCall={p => setCallModal(p)}
+              questions={questions}
+            />
+          )}
+          {view === 'script' && (
+            <ScriptPage questions={questions} onSave={setQuestions} />
+          )}
+          {view === 'voice' && (
+            <VoiceLabPage serverConfig={serverConfig} />
+          )}
+          {view === 'history' && (
+            <HistoryPage callHistory={callHistory} />
+          )}
+          {view === 'settings' && (
+            <SettingsPage onConfigSaved={setServerConfig} />
+          )}
+        </div>
+      </div>
+
+      {/* Confirm Call Modal */}
+      {callModal && (
+        <ConfirmCallModal
+          patient={callModal}
+          questions={questions}
+          onConfirm={initiateCall}
+          onClose={() => setCallModal(null)}
+        />
+      )}
+
+      {/* Live Call Monitor Modal */}
+      {liveModal && (
+        <ActiveCallPanel
+          call={liveModal}
+          onClose={() => setLiveModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

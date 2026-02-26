@@ -1,0 +1,24 @@
+{
+  "name": "agentmatt-server",
+  "version": "1.0.0",
+  "description": "AgentMatt Voice Check-In Server — Twilio + ElevenLabs + Claude",
+  "main": "agentmatt-server.js",
+  "scripts": {
+    "start": "node agentmatt-server.js",
+    "dev": "nodemon agentmatt-server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "twilio": "^5.3.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
