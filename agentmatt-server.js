@@ -203,6 +203,53 @@ OUTPUT ONLY what you would say aloud on the phone. No meta-commentary.`;
   return { text, shouldHangup };
 }
 
+/**
+ * Analyze a completed call transcript for patient engagement and frailty.
+ * Updates session.voiceAnalysis in place. Runs asynchronously after call ends.
+ */
+async function analyzeCallTranscript(session) {
+  if (!cfg.anthropicApiKey) return;
+  if (!session.transcript || session.transcript.length < 2) return;
+
+  const patientTurns = session.transcript.filter(t => t.speaker === 'patient');
+  if (patientTurns.length === 0) return;
+
+  try {
+    const anthropic = new Anthropic({ apiKey: cfg.anthropicApiKey });
+
+    const transcriptText = session.transcript
+      .map(t => `${t.speaker === 'agent' ? 'Agent' : 'Patient'}: ${t.text}`)
+      .join('\n');
+
+    const response = await anthropic.messages.create({
+      model:      'claude-opus-4-6',
+      max_tokens: 400,
+      messages: [{
+        role: 'user',
+        content: `You are a clinical care coordinator reviewing a health check-in call with patient ${session.patientName} (risk level: ${session.riskLevel || 'unknown'}).
+
+Analyze the transcript below and return ONLY valid JSON — no markdown, no extra text.
+
+Evaluate:
+1. ENGAGEMENT (1-10, 10 = highly engaged): Is the patient responsive, giving meaningful answers, asking questions?
+2. FRAILTY (1-10, 10 = most frail): Signs of cognitive difficulty, confusion, fatigue, slow or halting speech patterns, concerning symptom mentions, very short responses indicating low energy.
+
+Transcript:
+${transcriptText}
+
+Return exactly this JSON shape:
+{"engagement":{"score":7,"level":"High","notes":"one brief observation"},"frailty":{"score":3,"level":"Low","notes":"one brief observation"},"summary":"one sentence overall clinical impression"}`,
+      }],
+    });
+
+    const raw = response.content[0].text.trim();
+    const analysis = JSON.parse(raw);
+    session.voiceAnalysis = { ...analysis, analyzedAt: new Date().toISOString() };
+  } catch (err) {
+    console.error('[voice-analysis]', err.message);
+  }
+}
+
 // ─── Config Routes ───────────────────────────────────────────────────────────
 
 app.get('/api/config', (_req, res) => {
@@ -288,6 +335,20 @@ app.get('/api/calls/:sid', (req, res) => {
     || callHistory.find(c => c.callSid === req.params.sid);
   if (!session) return res.status(404).json({ error: 'Not found' });
   res.json(session);
+});
+
+app.post('/api/calls/:sid/analyze', async (req, res) => {
+  const session = callHistory.find(c => c.callSid === req.params.sid);
+  if (!session) return res.status(404).json({ error: 'Call not found in history' });
+  if (!session.transcript || session.transcript.length === 0) {
+    return res.status(400).json({ error: 'No transcript available to analyze' });
+  }
+  try {
+    await analyzeCallTranscript(session);
+    res.json({ voiceAnalysis: session.voiceAnalysis || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Twilio Webhook: Initial Call ────────────────────────────────────────────
@@ -380,6 +441,8 @@ app.post('/twilio/gather/:callSid', async (req, res) => {
       session.outcome = 'completed';
       callHistory.unshift({ ...session });
       activeCalls.delete(callSid);
+      // Run voice analysis in the background on the archived record
+      analyzeCallTranscript(callHistory[0]).catch(() => {});
       return res.type('text/xml').send(buildTwiML(audioId, text, null));
     }
 
