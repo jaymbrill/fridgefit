@@ -211,6 +211,28 @@
     .alert-info    { background: #1e3a5f; border: 1px solid #1d4ed8; color: #93c5fd; }
     .alert-success { background: #052e16; border: 1px solid #065f46; color: #6ee7b7; }
 
+    /* ── Rating ───────────────────────────────────────────────── */
+    .stars { display: inline-flex; gap: 1px; }
+    .star-btn {
+      background: none; border: none; cursor: pointer;
+      font-size: 17px; padding: 0 1px; line-height: 1;
+      color: var(--border); transition: color 0.1s, transform 0.1s;
+    }
+    .star-btn:hover:not(.readonly), .star-btn.on { color: var(--yellow); }
+    .star-btn:hover:not(.readonly) { transform: scale(1.2); }
+    .star-btn.readonly { cursor: default; }
+    .frailty-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .frailty-btn {
+      padding: 5px 12px; border-radius: 20px;
+      border: 1px solid var(--border); background: var(--surface2);
+      color: var(--muted); font-size: 11px; cursor: pointer;
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .frailty-btn:hover { border-color: var(--purple); color: var(--text); }
+    .frailty-btn.on { border-color: var(--purple); background: #3b1f6b; color: #c4b5fd; font-weight: 600; }
+    .rating-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .rating-label { font-size: 11px; color: var(--muted); min-width: 40px; }
+
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -299,6 +321,120 @@ function StatusBadge({ status }) {
   };
   const [cls, label] = map[status?.toLowerCase()] || ['badge-gray', status || 'Unknown'];
   return <span className={`badge ${cls}`}>{label}</span>;
+}
+
+// ─── Rating components ─────────────────────────────────────────────────────────
+
+const FRAILTY_META = [
+  null,
+  { label: 'Very Fit',   cls: 'badge-green',  desc: 'Robust, active, no symptoms' },
+  { label: 'Well',       cls: 'badge-green',  desc: 'Less active but no disease symptoms' },
+  { label: 'Managing',   cls: 'badge-yellow', desc: 'Medical problems, adequately controlled' },
+  { label: 'Vulnerable', cls: 'badge-yellow', desc: 'Slowed, dependent on others for some tasks' },
+  { label: 'Frail',      cls: 'badge-red',    desc: 'Marked dependency, needs significant support' },
+];
+
+const ENGAGEMENT_LABELS = ['', 'Unresponsive', 'Minimal', 'Adequate', 'Good', 'Excellent'];
+
+function RatingStars({ value, onChange, readOnly }) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div className="stars">
+      {[1, 2, 3, 4, 5].map(n => (
+        <button
+          key={n}
+          type="button"
+          className={`star-btn${(hover || value) >= n ? ' on' : ''}${readOnly ? ' readonly' : ''}`}
+          onClick={() => !readOnly && onChange && onChange(n)}
+          onMouseEnter={() => !readOnly && setHover(n)}
+          onMouseLeave={() => !readOnly && setHover(0)}
+        >★</button>
+      ))}
+    </div>
+  );
+}
+
+function FrailtyBadge({ level }) {
+  const meta = FRAILTY_META[level];
+  if (!meta) return <span style={{ color: 'var(--muted)' }}>—</span>;
+  return <span className={`badge ${meta.cls}`}>{level} – {meta.label}</span>;
+}
+
+function RateCallModal({ call, existing, onSave, onClose }) {
+  const [engagement, setEngagement] = useState(existing?.engagement || null);
+  const [frailty, setFrailty]       = useState(existing?.frailty || null);
+  const [notes, setNotes]           = useState(existing?.notes || '');
+
+  function handleSave() {
+    if (!engagement || !frailty) return alert('Please rate both Engagement and Frailty before saving.');
+    onSave(call.callSid, { engagement, frailty, notes });
+    onClose();
+  }
+
+  return (
+    <Modal title={`Rate Interaction — ${call.patientName}`} onClose={onClose}>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>
+        {fmtDate(call.startTime)} at {fmtTime(call.startTime)} · Duration: {fmtDuration(call.startTime, call.endTime)}
+      </div>
+
+      <div className="form-group">
+        <label>Patient Engagement</label>
+        <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
+          How actively and clearly did the patient participate in this call?
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <RatingStars value={engagement} onChange={setEngagement} />
+          {engagement && (
+            <span style={{ fontSize: 12, color: 'var(--yellow)' }}>
+              {ENGAGEMENT_LABELS[engagement]}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label>Frailty Assessment</label>
+        <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
+          Based on this interaction, assess the patient's frailty level.
+        </p>
+        <div className="frailty-btns">
+          {FRAILTY_META.slice(1).map(f => (
+            <button
+              key={f.label}
+              type="button"
+              className={`frailty-btn${frailty === FRAILTY_META.indexOf(f) ? ' on' : ''}`}
+              onClick={() => setFrailty(FRAILTY_META.indexOf(f))}
+              title={f.desc}
+            >
+              {FRAILTY_META.indexOf(f)} – {f.label}
+            </button>
+          ))}
+        </div>
+        {frailty && (
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
+            {FRAILTY_META[frailty]?.desc}
+          </p>
+        )}
+      </div>
+
+      <div className="form-group">
+        <label>Observation Notes (optional)</label>
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          placeholder="Any notable observations from this interaction..."
+          rows={3}
+        />
+      </div>
+
+      <div className="modal-actions">
+        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={handleSave} disabled={!engagement || !frailty}>
+          Save Rating
+        </button>
+      </div>
+    </Modal>
+  );
 }
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
@@ -874,8 +1010,11 @@ function SettingsPage({ onConfigSaved }) {
 
 // ─── Call History ──────────────────────────────────────────────────────────────
 
-function HistoryPage({ callHistory }) {
+function HistoryPage({ callHistory, ratings, onRate }) {
   const [selected, setSelected] = useState(null);
+  const [rateCall, setRateCall] = useState(null);
+
+  const completedStatuses = ['completed', 'failed', 'no-answer', 'busy', 'canceled'];
 
   return (
     <div>
@@ -891,32 +1030,64 @@ function HistoryPage({ callHistory }) {
               <tr>
                 <th>Patient</th>
                 <th>Date</th>
-                <th>Time</th>
                 <th>Duration</th>
                 <th>Status</th>
-                <th>Transcript</th>
+                <th>Engagement</th>
+                <th>Frailty</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {callHistory.map(c => (
-                <tr key={c.callSid}>
-                  <td>
-                    <strong>{c.patientName}</strong>
-                    {c.riskLevel && <><br/><RiskBadge level={c.riskLevel} /></>}
-                  </td>
-                  <td style={{ color: 'var(--muted)' }}>{fmtDate(c.startTime)}</td>
-                  <td style={{ color: 'var(--muted)' }}>{fmtTime(c.startTime)}</td>
-                  <td style={{ color: 'var(--muted)' }}>{fmtDuration(c.startTime, c.endTime)}</td>
-                  <td><StatusBadge status={c.status || c.outcome} /></td>
-                  <td>
-                    {c.transcript && c.transcript.length > 0 ? (
-                      <button className="btn btn-ghost btn-sm" onClick={() => setSelected(c)}>
-                        View ({c.transcript.length} msgs)
-                      </button>
-                    ) : <span style={{ color: 'var(--muted)' }}>—</span>}
-                  </td>
-                </tr>
-              ))}
+              {callHistory.map(c => {
+                const rating = ratings[c.callSid];
+                const isCompleted = completedStatuses.includes(c.status || c.outcome);
+                return (
+                  <tr key={c.callSid}>
+                    <td>
+                      <strong>{c.patientName}</strong>
+                      {c.riskLevel && <><br/><RiskBadge level={c.riskLevel} /></>}
+                    </td>
+                    <td style={{ color: 'var(--muted)' }}>
+                      {fmtDate(c.startTime)}<br/>
+                      <span style={{ fontSize: 11 }}>{fmtTime(c.startTime)}</span>
+                    </td>
+                    <td style={{ color: 'var(--muted)' }}>{fmtDuration(c.startTime, c.endTime)}</td>
+                    <td><StatusBadge status={c.status || c.outcome} /></td>
+                    <td>
+                      {rating?.engagement ? (
+                        <div className="rating-row">
+                          <RatingStars value={rating.engagement} readOnly />
+                          <span style={{ fontSize: 11, color: 'var(--muted)' }}>{ENGAGEMENT_LABELS[rating.engagement]}</span>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      {rating?.frailty ? (
+                        <FrailtyBadge level={rating.frailty} />
+                      ) : (
+                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {c.transcript && c.transcript.length > 0 && (
+                          <button className="btn btn-ghost btn-sm" onClick={() => setSelected(c)}>
+                            Transcript
+                          </button>
+                        )}
+                        {isCompleted && (
+                          <button className="btn btn-ghost btn-sm" onClick={() => setRateCall(c)}
+                            style={rating ? {} : { borderColor: 'var(--yellow)', color: 'var(--yellow)' }}>
+                            {rating ? `${icons.edit} Re-rate` : '⭐ Rate'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -927,6 +1098,24 @@ function HistoryPage({ callHistory }) {
           <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--muted)' }}>
             {fmtDate(selected.startTime)} at {fmtTime(selected.startTime)} · Duration: {fmtDuration(selected.startTime, selected.endTime)}
           </div>
+          {ratings[selected.callSid] && (
+            <div style={{ marginBottom: 12, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8, display: 'flex', gap: 20, fontSize: 13 }}>
+              <div>
+                <span style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>ENGAGEMENT</span>
+                <RatingStars value={ratings[selected.callSid].engagement} readOnly />
+              </div>
+              <div>
+                <span style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>FRAILTY</span>
+                <FrailtyBadge level={ratings[selected.callSid].frailty} />
+              </div>
+              {ratings[selected.callSid].notes && (
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>NOTES</span>
+                  <span style={{ fontSize: 12 }}>{ratings[selected.callSid].notes}</span>
+                </div>
+              )}
+            </div>
+          )}
           <div className="transcript">
             {selected.transcript.map((m, i) => (
               <div key={i} style={{ alignSelf: m.speaker === 'agent' ? 'flex-start' : 'flex-end' }}>
@@ -943,6 +1132,15 @@ function HistoryPage({ callHistory }) {
             <button className="btn btn-ghost" onClick={() => setSelected(null)}>Close</button>
           </div>
         </Modal>
+      )}
+
+      {rateCall && (
+        <RateCallModal
+          call={rateCall}
+          existing={ratings[rateCall.callSid]}
+          onSave={onRate}
+          onClose={() => setRateCall(null)}
+        />
       )}
     </div>
   );
@@ -1067,6 +1265,7 @@ function App() {
   const [view, setView]           = useState('dashboard');
   const [patients, setPatients]   = useLocalStorage('agentmatt_patients', []);
   const [questions, setQuestions] = useLocalStorage('agentmatt_questions', []);
+  const [ratings, setRatings]     = useLocalStorage('agentmatt_ratings', {});
   const [callHistory, setCallHistory] = useState([]);
   const [activeCalls, setActiveCalls] = useState([]);
   const [callModal, setCallModal] = useState(null);  // patient to call
@@ -1109,6 +1308,13 @@ function App() {
   }
   function deletePatient(id) {
     setPatients(prev => prev.filter(p => p.id !== id));
+  }
+
+  async function saveRating(callSid, rating) {
+    const entry = { ...rating, ratedAt: new Date().toISOString() };
+    setRatings(prev => ({ ...prev, [callSid]: entry }));
+    // Best-effort sync to server (server is in-memory, localStorage is the durable store)
+    api('POST', `/api/calls/${callSid}/rate`, rating).catch(() => {});
   }
 
   async function initiateCall(patient, qs) {
@@ -1249,7 +1455,7 @@ function App() {
             <VoiceLabPage serverConfig={serverConfig} />
           )}
           {view === 'history' && (
-            <HistoryPage callHistory={callHistory} />
+            <HistoryPage callHistory={callHistory} ratings={ratings} onRate={saveRating} />
           )}
           {view === 'settings' && (
             <SettingsPage onConfigSaved={setServerConfig} />

@@ -290,6 +290,16 @@ app.get('/api/calls/:sid', (req, res) => {
   res.json(session);
 });
 
+app.post('/api/calls/:sid/rate', (req, res) => {
+  const { engagement, frailty, notes } = req.body;
+  if (!engagement || !frailty) return res.status(400).json({ error: 'engagement and frailty are required' });
+  const session = callHistory.find(c => c.callSid === req.params.sid)
+    || activeCalls.get(req.params.sid);
+  if (!session) return res.status(404).json({ error: 'Not found' });
+  session.rating = { engagement, frailty, notes: notes || '', ratedAt: new Date().toISOString() };
+  res.json({ success: true, rating: session.rating });
+});
+
 // ─── Twilio Webhook: Initial Call ────────────────────────────────────────────
 
 app.post('/twilio/voice', async (req, res) => {
