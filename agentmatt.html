@@ -1333,7 +1333,10 @@ function App() {
   const [patients, setPatients]   = useLocalStorage('agentmatt_patients', []);
   const [questions, setQuestions] = useLocalStorage('agentmatt_questions', []);
   const [ratings, setRatings]     = useLocalStorage('agentmatt_ratings', {});
-  const [callHistory, setCallHistory] = useState([]);
+  const [callHistory, setCallHistory] = useState(() => {
+    try { const s = localStorage.getItem('agentmatt_call_history'); return s ? JSON.parse(s) : []; }
+    catch { return []; }
+  });
   const [activeCalls, setActiveCalls] = useState([]);
   const [callModal, setCallModal] = useState(null);  // patient to call
   const [liveModal, setLiveModal] = useState(null);  // active call to watch
@@ -1349,10 +1352,17 @@ function App() {
           api('GET', '/api/calls'),
         ]);
         setServerStatus(health);
-        const active = calls.filter(c => !['completed', 'failed', 'no-answer', 'busy', 'canceled'].includes(c.status));
-        const history = calls.filter(c => ['completed', 'failed', 'no-answer', 'busy', 'canceled'].includes(c.status));
+        const TERMINAL = ['completed', 'failed', 'no-answer', 'busy', 'canceled'];
+        const active  = calls.filter(c => !TERMINAL.includes(c.status));
+        const history = calls.filter(c =>  TERMINAL.includes(c.status));
         setActiveCalls(active);
-        setCallHistory(history);
+        // Merge server calls with any locally cached calls (server is in-memory; cache survives restarts)
+        const cached = (() => { try { return JSON.parse(localStorage.getItem('agentmatt_call_history') || '[]'); } catch { return []; } })();
+        const serverSids = new Set(history.map(c => c.callSid));
+        const merged = [...history, ...cached.filter(c => !serverSids.has(c.callSid))]
+          .sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+        setCallHistory(merged);
+        localStorage.setItem('agentmatt_call_history', JSON.stringify(merged));
       } catch {
         setServerStatus(null);
       }
