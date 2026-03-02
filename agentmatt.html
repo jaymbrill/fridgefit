@@ -439,10 +439,10 @@ function RateCallModal({ call, existing, onSave, onClose }) {
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, width }) {
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
+      <div className="modal" style={width ? { width } : {}}>
         <h3>{title}</h3>
         {children}
       </div>
@@ -1200,8 +1200,11 @@ function ConfirmCallModal({ patient, questions, onConfirm, onClose }) {
 
 // ─── Active Call Panel ────────────────────────────────────────────────────────
 
-function ActiveCallPanel({ call, onClose }) {
+function ActiveCallPanel({ call, onClose, existingRating, onRate }) {
   const [liveCall, setLiveCall] = useState(call);
+  const [engagement, setEngagement] = useState(existingRating?.engagement || null);
+  const [frailty, setFrailty]       = useState(existingRating?.frailty || null);
+  const transcriptEndRef            = useRef(null);
 
   useEffect(() => {
     const id = setInterval(async () => {
@@ -1216,39 +1219,103 @@ function ActiveCallPanel({ call, onClose }) {
     return () => clearInterval(id);
   }, [call.callSid]);
 
+  // Auto-scroll transcript to bottom on new messages
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [liveCall.transcript?.length]);
+
+  function handleEngagement(val) {
+    setEngagement(val);
+    onRate && onRate(call.callSid, { engagement: val, frailty });
+  }
+  function handleFrailty(val) {
+    setFrailty(val);
+    onRate && onRate(call.callSid, { engagement, frailty: val });
+  }
+
   const isActive = !['completed', 'failed', 'no-answer', 'busy', 'canceled'].includes(liveCall.status);
+  const rated = engagement !== null || frailty !== null;
 
   return (
-    <Modal title={`Live Call — ${liveCall.patientName}`} onClose={onClose}>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 13 }}>
-        <div><span style={{ color: 'var(--muted)' }}>Phone: </span>{liveCall.phone}</div>
-        <div><StatusBadge status={liveCall.status} /></div>
+    <Modal title={`${isActive ? '🟢 Live' : '📋 Completed'} — ${liveCall.patientName}`} onClose={onClose} width={580}>
+      {/* Status row */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 14, fontSize: 13, alignItems: 'center', flexWrap: 'wrap' }}>
+        <StatusBadge status={liveCall.status} />
+        <span style={{ color: 'var(--muted)' }}>{liveCall.phone}</span>
         {liveCall.questions && (
-          <div><span style={{ color: 'var(--muted)' }}>Q: </span>{liveCall.currentQuestionIndex}/{liveCall.questions.length}</div>
+          <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+            Q {liveCall.currentQuestionIndex}/{liveCall.questions.length}
+          </span>
+        )}
+        {isActive && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--green)', fontSize: 12, marginLeft: 'auto' }}>
+            <div className="dot" style={{ width: 7, height: 7 }} /> Updating every 2.5s
+          </span>
         )}
       </div>
 
-      {isActive && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'var(--green)', fontSize: 13 }}>
-          <div className="dot" /> In progress — auto-refreshing...
+      {/* Live assessment panel */}
+      <div style={{
+        background: 'var(--surface2)', borderRadius: 8, padding: '12px 14px', marginBottom: 14,
+        border: `1px solid ${rated ? 'var(--blue)' : 'var(--border)'}`,
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          Patient Assessment
+          {rated && <span style={{ color: 'var(--green)', textTransform: 'none', fontWeight: 400, letterSpacing: 0 }}>✓ auto-saved</span>}
         </div>
-      )}
 
-      <div className="card-title">Transcript</div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>ENGAGEMENT</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <RatingStars value={engagement} onChange={handleEngagement} />
+            <span style={{ fontSize: 11, color: engagement ? 'var(--yellow)' : 'var(--muted)' }}>
+              {engagement ? ENGAGEMENT_LABELS[engagement] : 'Click to rate'}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>FRAILTY LEVEL</div>
+          <div className="frailty-btns" style={{ marginTop: 0 }}>
+            {FRAILTY_META.slice(1).map(f => {
+              const idx = FRAILTY_META.indexOf(f);
+              return (
+                <button key={idx} type="button"
+                  className={`frailty-btn${frailty === idx ? ' on' : ''}`}
+                  onClick={() => handleFrailty(idx)} title={f.desc}
+                >
+                  {idx} – {f.label}
+                </button>
+              );
+            })}
+          </div>
+          {frailty && (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>{FRAILTY_META[frailty]?.desc}</div>
+          )}
+        </div>
+      </div>
+
+      {/* Transcript */}
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+        Transcript {liveCall.transcript?.length > 0 && `· ${liveCall.transcript.length} messages`}
+      </div>
       <div className="transcript" style={{ minHeight: 80 }}>
         {(!liveCall.transcript || liveCall.transcript.length === 0) ? (
           <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>
             {isActive ? 'Waiting for conversation to begin...' : 'No transcript available.'}
           </div>
         ) : (
-          liveCall.transcript.map((m, i) => (
-            <div key={i} style={{ alignSelf: m.speaker === 'agent' ? 'flex-start' : 'flex-end' }}>
-              <div className={`msg msg-${m.speaker === 'agent' ? 'agent' : 'patient'}`}>{m.text}</div>
-              <div className="msg-time" style={{ textAlign: m.speaker === 'agent' ? 'left' : 'right' }}>
-                {m.speaker === 'agent' ? cfg?.providerName || 'Agent' : liveCall.patientName} · {fmtTime(m.ts)}
+          <>
+            {liveCall.transcript.map((m, i) => (
+              <div key={i} style={{ alignSelf: m.speaker === 'agent' ? 'flex-start' : 'flex-end' }}>
+                <div className={`msg msg-${m.speaker === 'agent' ? 'agent' : 'patient'}`}>{m.text}</div>
+                <div className="msg-time" style={{ textAlign: m.speaker === 'agent' ? 'left' : 'right' }}>
+                  {m.speaker === 'agent' ? 'Agent' : liveCall.patientName} · {fmtTime(m.ts)}
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+            <div ref={transcriptEndRef} />
+          </>
         )}
       </div>
 
@@ -1310,11 +1377,16 @@ function App() {
     setPatients(prev => prev.filter(p => p.id !== id));
   }
 
-  async function saveRating(callSid, rating) {
-    const entry = { ...rating, ratedAt: new Date().toISOString() };
-    setRatings(prev => ({ ...prev, [callSid]: entry }));
-    // Best-effort sync to server (server is in-memory, localStorage is the durable store)
-    api('POST', `/api/calls/${callSid}/rate`, rating).catch(() => {});
+  function saveRating(callSid, rating) {
+    // Merge with any existing partial rating so live one-at-a-time updates accumulate
+    setRatings(prev => {
+      const merged = { ...(prev[callSid] || {}), ...rating, ratedAt: new Date().toISOString() };
+      // Only POST to server once both dimensions are present
+      if (merged.engagement && merged.frailty) {
+        api('POST', `/api/calls/${callSid}/rate`, merged).catch(() => {});
+      }
+      return { ...prev, [callSid]: merged };
+    });
   }
 
   async function initiateCall(patient, qs) {
@@ -1478,6 +1550,8 @@ function App() {
         <ActiveCallPanel
           call={liveModal}
           onClose={() => setLiveModal(null)}
+          existingRating={ratings[liveModal.callSid]}
+          onRate={saveRating}
         />
       )}
     </div>
